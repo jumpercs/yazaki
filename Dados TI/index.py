@@ -63,7 +63,6 @@ start_time = time.time()
 
 # Função para processar um frame
 def process_frame(frame, tempo_espera):  # Adicione tempo_espera como argumento
-    print("Processando frame...")
     global ultimo_reconhecimento
     # Encontrar rostos no frame
     rostos_usuario = face_recognition.face_locations(frame)
@@ -106,6 +105,19 @@ def process_frame(frame, tempo_espera):  # Adicione tempo_espera como argumento
 
     return frame
 
+# Função para atualizar a tela
+def atualizar_tela():
+    global frame_processado
+    while True:
+        with lock:
+            if frame_processado is not None:
+                cv2.imshow('Câmera', frame_processado)
+                frame_processado = None  # Limpa a variável após exibir o frame
+
+# Criar a thread para atualizar a interface
+thread_tela = threading.Thread(target=atualizar_tela)
+thread_tela.start()
+
 # Loop principal
 while(True):
     # Ler um frame da câmera
@@ -122,10 +134,10 @@ while(True):
     thread.start()
 
     # Exibir o frame processado (pode não ser o mais recente)
-    with lock:  # Adquire o lock para acessar o buffer com segurança
-        if len(frame_buffer) > 0:
-            frame_processado = frame_buffer[0]
-            cv2.imshow('Câmera', frame_processado)
+    # with lock:  # Adquire o lock para acessar o buffer com segurança
+    #     if len(frame_buffer) > 0:
+    #         frame_processado = frame_buffer[0]
+    #         cv2.imshow('Câmera', frame_processado)
 
     # Pressione 'q' para sair
     if cv2.waitKey(1) & 0xFF == ord('q'):
