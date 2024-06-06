@@ -4,6 +4,7 @@ import cv2
 import os
 import time
 import json
+import threading
 
 # Caminho para a pasta 'Fotos'
 pasta_fotos = 'Fotos'
@@ -48,13 +49,21 @@ frame_buffer_size = 10
 frame_buffer = []
 
 # Tempo de espera para a próxima verificação
-tempo_espera = 1
+tempo_espera = 1  # Tempo em segundos
 
 # Variável para controlar a verificação
 ultimo_reconhecimento = 0
 
+# Lock para sincronizar o acesso ao buffer
+lock = threading.Lock()
+
+# Variáveis para cálculo do frame rate
+frame_count = 0
+start_time = time.time()
+
 # Função para processar um frame
-def process_frame(frame):
+def process_frame(frame, tempo_espera):  # Adicione tempo_espera como argumento
+    print("Processando frame...")
     global ultimo_reconhecimento
     # Encontrar rostos no frame
     rostos_usuario = face_recognition.face_locations(frame)
@@ -66,24 +75,34 @@ def process_frame(frame):
     if len(rostos_usuario) == 0:
         return frame
 
-    # Loop para cada rosto detectado
-    for rosto_usuario, codificacao_usuario in zip(rostos_usuario, codificacoes_usuario):
+    # Verificar se a verificação pode ser realizada
+    if time.time() - ultimo_reconhecimento >= tempo_espera:
+        # Loop para cada rosto detectado
+        for rosto_usuario, codificacao_usuario in zip(rostos_usuario, codificacoes_usuario):
 
-        # Comparar com as codificações faciais conhecidas
-        resultados_comparacao = face_recognition.compare_faces(known_face_encodings, codificacao_usuario, tolerance=0.15)
+            # Comparar com as codificações faciais conhecidas
+            resultados_comparacao = face_recognition.compare_faces(known_face_encodings, codificacao_usuario, tolerance=0.15)
 
-        # Verificar se o rosto é reconhecido
-        if True in resultados_comparacao:
-            # Verificar se a verificação pode ser realizada
-            if time.time() - ultimo_reconhecimento >= tempo_espera:
+            # Verificar se o rosto é reconhecido
+            if True in resultados_comparacao:
                 indice_correspondente = resultados_comparacao.index(True)
                 nome_usuario = known_face_names[indice_correspondente]
                 print(f"Usuário encontrado: {nome_usuario}")
                 cv2.putText(frame, f"Usuário: {nome_usuario}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 ultimo_reconhecimento = time.time()  # Atualiza o último tempo de reconhecimento
+                break  # Sai do loop após encontrar um rosto reconhecido
         else:
             print("Usuário não reconhecido.")
             cv2.putText(frame, "Usuário não reconhecido", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
+    # Calcular e exibir o frame rate
+    global frame_count, start_time
+    frame_count += 1
+    if time.time() - start_time >= 1:
+        fps = frame_count / (time.time() - start_time)
+        start_time = time.time()
+        frame_count = 0
+        cv2.putText(frame, f"FPS: {fps:.2f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
     return frame
 
@@ -93,15 +112,20 @@ while(True):
     ret, frame = camera.read()
 
     # Adicionar o frame ao buffer
-    frame_buffer.append(frame)
-    if len(frame_buffer) > frame_buffer_size:
-        frame_buffer.pop(0)
+    with lock:  # Adquire o lock antes de acessar o buffer
+        frame_buffer.append(frame)
+        if len(frame_buffer) > frame_buffer_size:
+            frame_buffer.pop(0)
 
-    # Processar o frame mais antigo do buffer
-    frame_processado = process_frame(frame_buffer[0])
+    # Processar o frame mais antigo do buffer em uma thread separada
+    thread = threading.Thread(target=process_frame, args=(frame_buffer[0], tempo_espera))  # Passe tempo_espera
+    thread.start()
 
-    # Exibir o frame processado
-    cv2.imshow('Câmera', frame_processado)
+    # Exibir o frame processado (pode não ser o mais recente)
+    with lock:  # Adquire o lock para acessar o buffer com segurança
+        if len(frame_buffer) > 0:
+            frame_processado = frame_buffer[0]
+            cv2.imshow('Câmera', frame_processado)
 
     # Pressione 'q' para sair
     if cv2.waitKey(1) & 0xFF == ord('q'):
