@@ -9,6 +9,14 @@ import json
 pasta_fotos = 'Fotos'
 
 founded_user = ""
+
+# eye blink detection - piscada de olhos
+# head movement - movimento de cabeça
+# face recognition - reconhecimento facial
+# face detection - detecção facial
+# face tracking - rastreamento facial
+# reflection - reflexo
+
 # Conexão com o banco de dados
 conn = sqlite3.connect('Dados_ti Banco Pronto.db')
 cursor = conn.cursor()
@@ -34,8 +42,8 @@ except FileNotFoundError:
             codificacoes_banco = face_recognition.face_encodings(imagem_banco)[0]
             known_face_encodings.append(codificacoes_banco.tolist())  # Converta para lista para salvar no JSON
             known_face_names.append(nome)
-        except:
-            print(f"Erro ao carregar imagem para {id_rede}: {nome}")
+        except Exception as e:
+            print(f"Erro ao carregar imagem para {id_rede}: {nome}, Erro: {e}")
 
     # Salve as codificações no arquivo JSON
     codificacoes_faciais = {'encodings': known_face_encodings, 'names': known_face_names}
@@ -59,6 +67,7 @@ ultimo_reconhecimento = time.time()
 def process_frame(frame):
     global ultimo_reconhecimento
     global founded_user
+    
     # Encontrar rostos no frame
     rostos_usuario = face_recognition.face_locations(frame)
 
@@ -75,15 +84,16 @@ def process_frame(frame):
 
         # Comparar com as codificações faciais conhecidas
         resultados_comparacao = face_recognition.compare_faces(known_face_encodings, codificacao_usuario, tolerance=0.6)
-
+        print(resultados_comparacao)
         # Verificar se o rosto é reconhecido
         if True in resultados_comparacao:
             # Verificar se a verificação pode ser realizada
             if time.time() - ultimo_reconhecimento >= tempo_espera:
                 indice_correspondente = resultados_comparacao.index(True)
                 nome_usuario = known_face_names[indice_correspondente]
-                print(f"Usuário encontrado: {nome_usuario}")
-                print(f"Porcentagem de similaridade: {face_recognition.face_distance([known_face_encodings[indice_correspondente]], codificacao_usuario)[0] * 100:.2f}%")
+                # print(f"Usuário encontrado: {nome_usuario}")
+                # print(f"Porcentagem de similaridade: {face_recognition.face_distance([known_face_encodings[indice_correspondente]], codificacao_usuario)[0] * 100:.2f}%")
+                print(face_recognition.face_distance([known_face_encodings[indice_correspondente]], codificacao_usuario))
   
                 founded_user = nome_usuario
                 ultimo_reconhecimento = time.time()  # Atualiza o último tempo de reconhecimento
@@ -101,7 +111,6 @@ def process_frame_only_label(frame):
     cv2.putText(frame, f"Usuário: {founded_user}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
     return frame
 
-
 # Loop principal
 while(True):
     # Ler um frame da câmera
@@ -116,7 +125,7 @@ while(True):
     if time.time() - ultimo_reconhecimento < tempo_espera + 1:
         
         
-        frame_processado = process_frame_only_label(frame_buffer[-1])
+        frame_processado = process_frame_only_label(frame_buffer[0])
     else:
 
         # Processar o frame mais antigo do buffer
